@@ -32,7 +32,8 @@ cat_columns = [
     "com_reg_count",
     "idx_count",
     "lead_count",
-    "enterprise_count"
+    "enterprise_count",
+    "enterprise_weight"
 ]
 
 def index_processing(context_df, train, test, column_name):
@@ -42,8 +43,6 @@ def index_processing(context_df, train, test, column_name):
     return idx
 
 def process_context_data(train_df, test_df):
-    train_df['bant_submit_count'] = train_df['bant_submit'].apply(lambda x: 1 if x == 0 else 0)
-    test_df['bant_submit_count'] = test_df['bant_submit'].apply(lambda x: 1 if x == 0 else 0)
     context_df = pd.concat([train_df[cat_columns], test_df[cat_columns]]).reset_index(drop=True)
     idx = {}
     for col in cat_columns:
@@ -53,8 +52,8 @@ def process_context_data(train_df, test_df):
 
 def context_data_load():
     ######################## DATA LOAD
-    train = pd.read_csv('train_fe.csv', low_memory=False)
-    test = pd.read_csv('submission_fe.csv')
+    train = pd.read_csv('train_final.csv', low_memory=False)
+    test = pd.read_csv('submission_final.csv')
 
     idx, context_train, context_test = process_context_data(train, test)
     field_dims = np.array([len(toidx) for toidx in idx], dtype=np.int32)
