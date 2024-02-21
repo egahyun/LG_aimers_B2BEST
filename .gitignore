@@ -4,3 +4,4 @@
 *.pyc
 
 /wandb
+/catboost_info
