@@ -52,8 +52,8 @@ def process_context_data(train_df, test_df):
 
 def context_data_load():
     ######################## DATA LOAD
-    train = pd.read_csv('train_final.csv', low_memory=False)
-    test = pd.read_csv('submission_final.csv')
+    train = pd.read_csv('train_last.csv', low_memory=False)
+    test = pd.read_csv('submission_last.csv')
 
     idx, context_train, context_test = process_context_data(train, test)
     field_dims = np.array([len(toidx) for toidx in idx], dtype=np.int32)
