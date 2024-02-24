@@ -5,6 +5,10 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader, Dataset
 from sklearn.model_selection import StratifiedKFold
 from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import ADASYN
+from imblearn.combine import SMOTETomek
+from imblearn.under_sampling import TomekLinks
+
 from sklearn.model_selection import train_test_split
 
 cat_columns = [
@@ -55,12 +59,32 @@ def context_data_load():
     train = pd.read_csv('train_last.csv', low_memory=False)
     test = pd.read_csv('submission_last.csv')
 
+    # # 'customer_idx'와 'lead_owner' 카테고리별로 'is_converted'의 평균과 개수를 계산합니다.
+    # ci_lo_mean = train.groupby(['customer_idx', 'lead_owner'])['is_converted'].agg(['mean', 'count']).sort_values(by='mean', ascending=False)
+
+    # # 변환율을 딕셔너리로 변환합니다.
+    # conversion_dict = ci_lo_mean['mean'].to_dict()
+
+    # # 'train' 데이터프레임에 새로운 열 'ci_lo_mean'을 추가하고 변환율을 매핑합니다.
+    # train['ci_lo_mean'] = train.apply(lambda x: conversion_dict.get((x['customer_idx'], x['lead_owner']), np.nan), axis=1)
+    # test['ci_lo_mean'] = test.apply(lambda x: conversion_dict.get((x['customer_idx'], x['lead_owner']), np.nan), axis=1)
+
+    train = train.fillna(0)
+    test = test.fillna(0)
+    for column in train.drop(['is_converted'], axis=1).columns:
+        if column in cat_columns:
+            train[column] = train[column].astype('category')
+            test[column] = test[column].astype('category')
+        else:
+            train[column] = train[column].astype('float')
+            test[column] = test[column].astype('float')
+
     idx, context_train, context_test = process_context_data(train, test)
     field_dims = np.array([len(toidx) for toidx in idx], dtype=np.int32)
 
     data = {
-            'train':context_train.fillna(0),
-            'test':context_test.fillna(0),
+            'train':context_train,
+            'test':context_test,
             'field_dims':field_dims,
             'cat_columns' : cat_columns,
             }
@@ -68,20 +92,31 @@ def context_data_load():
 
     return data
 
-def context_data_split(data):
-    # SMOTE를 사용하여 데이터 오버샘플링
-    smote = SMOTE(random_state=42)
-    X_resampled, y_resampled = smote.fit_resample(data['train'].drop(['is_converted'], axis=1), data['train']['is_converted'])
+def context_data_split(data, sampling_type: str = 'tomek', kfold: bool = True):
+    X_resampled, y_resampled = 0, 0
+    if sampling_type == 'smote':
+        # SMOTE를 사용하여 데이터 오버샘플링
+        smote = SMOTE(random_state=42)
+        X_resampled, y_resampled = smote.fit_resample(data['train'].drop(['is_converted'], axis=1), data['train']['is_converted'])
+    elif sampling_type == 'adasyn':
+        adasyn = ADASYN(random_state=42)
+        X_resampled, y_resampled = adasyn.fit_resample(data['train'].drop(['is_converted'], axis=1), data['train']['is_converted'])
+    elif sampling_type == 'tomek':
+        smoteto = SMOTETomek(tomek=TomekLinks(sampling_strategy='majority'))
+        X_resampled, y_resampled = smoteto.fit_resample(data['train'].drop(['is_converted'], axis=1), data['train']['is_converted'])
 
-    # 샘플링된 데이터를 다시 훈련 데이터와 테스트 데이터로 분할
-    X_train, X_valid, y_train, y_valid = train_test_split(X_resampled, 
-                                                      y_resampled, 
-                                                      test_size=0.2, 
-                                                      random_state=42, 
-                                                      stratify=y_resampled)
+    data['X_samp'], data['y_samp'] = X_resampled, y_resampled
 
-    y_train = y_train.astype(np.int32) ; y_valid = y_valid.astype(np.int32)
-    data['X_train'], data['X_valid'], data['y_train'], data['y_valid'] = X_train, X_valid, y_train, y_valid
+    if not kfold:
+        # 샘플링된 데이터를 다시 훈련 데이터와 테스트 데이터로 분할
+        X_train, X_valid, y_train, y_valid = train_test_split(X_resampled, 
+                                                        y_resampled, 
+                                                        test_size=0.2, 
+                                                        random_state=42, 
+                                                        stratify=y_resampled)
+
+        y_train = y_train.astype(np.int32) ; y_valid = y_valid.astype(np.int32)
+        data['X_train'], data['X_valid'], data['y_train'], data['y_valid'] = X_train, X_valid, y_train, y_valid
     
     return data
 
